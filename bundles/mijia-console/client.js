@@ -13,9 +13,12 @@ window.__ModuleLoader__.load({
     const NS = 'mijia-console'
     const PANEL_ID = 'mijia-console'
     const ROUTE_STATE = '/mijia-console/state'
+    const ROUTE_DEVICE = '/mijia-console/device'
     const ROUTE_CONTROL = '/mijia-console/control'
     const ROUTE_ASSETS = '/mijia-console/assets/'
-    const AUTO_REFRESH_MS = 30_000
+    const AUTO_REFRESH_MS = 10_000
+    // Retained across panel unmounts, without a background timer or persistent credentials.
+    let pageSnapshot = null
 
     /* ---------- 文案 ---------- */
     const zh = {
@@ -29,15 +32,24 @@ window.__ModuleLoader__.load({
       'refresh': '刷新',
       'refreshing': '刷新中…',
       'settings': '页面设置',
-      'settings.autoRefresh': '自动刷新（每 30 秒，仅在页面可见时运行）',
-      'settings.note': '默认手动刷新。页面隐藏或关闭后不会继续请求。',
+      'settings.autoRefresh': '自动刷新状态（每 10 秒，仅在页面可见时运行）',
+      'settings.note': '用电统计每 5 分钟更新。离开页面停止自动查询，可关闭自动刷新。',
       'devices.title': '我的设备',
       'devices.count': '台设备',
       'devices.updated': '更新于',
       'devices.stale': '刷新失败，显示的是该时间的缓存数据',
       'card.on': '已开启',
       'card.off': '已关闭',
-      'card.busy': '执行中…',
+      'card.busy': '正在发送…',
+      'card.checking': '指令已发送，正在确认状态…',
+      'card.unconfirmed': '指令结果待确认，请刷新状态；未自动重发',
+      'card.loading': '正在获取设备状态…',
+      'card.deliveryUnknown': '发送连接中断，指令可能已执行；请刷新状态，勿重复发送。',
+      'host.auth': '控制台连接权限已失效，请重新打开或重新连接 Harness。',
+      'card.updated': '状态更新于',
+      'card.statsUpdated': '用电更新于',
+      'card.cached': '显示上次数据',
+      'conn.partial': '部分设备更新异常',
       'card.retry': '重试',
       'plug.power': '当前功率',
       'plug.today': '今日用电',
@@ -74,16 +86,18 @@ window.__ModuleLoader__.load({
       'ac.statsNote': '用电统计单位未经官方确认，按 Wh 口径换算为 kWh 展示',
       'ac.rawState': '伴侣回读',
       'ac.roomTemp': '室温回读：该设备不支持（ac-state 不含可确认的室温）',
-      'ac.state.runningConfirmed': '运行中（功率实证）',
-      'ac.state.onSent': '开机指令已发送，空调本体待确认',
-      'ac.state.offConfirmed': '已关闭（功率实证）',
-      'ac.state.offSent': '关机指令已发送，本体待确认',
+      'ac.state.runningConfirmed': '检测到运行功率',
+      'ac.state.onSent': '伴侣回读开启，本体状态待确认',
+      'ac.state.offConfirmed': '当前为待机功率',
+      'ac.state.offSent': '伴侣回读关闭，本体状态待确认',
       'ac.state.unknown': '状态未知',
       'ops.title': '最近操作',
       'ops.empty': '暂无操作记录',
       'ops.source.page': '页面',
       'ops.source.channel': '语音/聊天',
-      'ops.status.confirmed': '已确认',
+      'ops.status.confirmed': '回读一致',
+      'ops.status.sending': '发送中',
+      'ops.status.unknown': '结果待确认',
       'ops.status.sent': '已发送',
       'ops.status.failed': '失败',
       'unit.w': 'W',
@@ -104,15 +118,24 @@ window.__ModuleLoader__.load({
       'refresh': 'Refresh',
       'refreshing': 'Refreshing…',
       'settings': 'Page settings',
-      'settings.autoRefresh': 'Auto refresh (every 30 s, only while this page is visible)',
-      'settings.note': 'Manual refresh by default. No requests while the page is hidden or closed.',
+      'settings.autoRefresh': 'Refresh state every 10 s while this page is visible',
+      'settings.note': 'Usage refreshes every 5 minutes. Automatic queries stop when hidden; auto refresh can be disabled.',
       'devices.title': 'My devices',
       'devices.count': 'devices',
       'devices.updated': 'Updated',
       'devices.stale': 'Refresh failed; showing cached data from that time',
       'card.on': 'On',
       'card.off': 'Off',
-      'card.busy': 'Working…',
+      'card.busy': 'Sending…',
+      'card.checking': 'Command accepted; checking state…',
+      'card.unconfirmed': 'Unconfirmed. Refresh status; command was not resent.',
+      'card.loading': 'Loading device state…',
+      'card.deliveryUnknown': 'Command connection lost; it may have executed. Refresh status; do not resend.',
+      'host.auth': 'Console connection authorization expired. Reopen or reconnect Harness.',
+      'card.updated': 'State updated',
+      'card.statsUpdated': 'Usage updated',
+      'card.cached': 'Showing last known data',
+      'conn.partial': 'Some device updates failed',
       'card.retry': 'Retry',
       'plug.power': 'Power',
       'plug.today': 'Today',
@@ -149,16 +172,18 @@ window.__ModuleLoader__.load({
       'ac.statsNote': 'Statistics unit unconfirmed by the vendor; shown as kWh converted from Wh',
       'ac.rawState': 'Companion readback',
       'ac.roomTemp': 'Room temperature readback: not supported by this device',
-      'ac.state.runningConfirmed': 'Running (power-verified)',
-      'ac.state.onSent': 'On-command sent; AC unit unconfirmed',
-      'ac.state.offConfirmed': 'Off (power-verified)',
-      'ac.state.offSent': 'Off-command sent; AC unit unconfirmed',
+      'ac.state.runningConfirmed': 'Operating power detected',
+      'ac.state.onSent': 'Companion reads on; AC unit unconfirmed',
+      'ac.state.offConfirmed': 'Standby power detected',
+      'ac.state.offSent': 'Companion reads off; AC unit unconfirmed',
       'ac.state.unknown': 'Unknown',
       'ops.title': 'Recent activity',
       'ops.empty': 'No operations yet',
       'ops.source.page': 'Page',
       'ops.source.channel': 'Voice/Chat',
-      'ops.status.confirmed': 'Confirmed',
+      'ops.status.confirmed': 'Readback matched',
+      'ops.status.sending': 'Sending',
+      'ops.status.unknown': 'Unconfirmed',
       'ops.status.sent': 'Sent',
       'ops.status.failed': 'Failed',
       'unit.w': 'W',
@@ -240,7 +265,7 @@ window.__ModuleLoader__.load({
 .mjc-stepper .mjc-btn { width: 34px; height: 34px; justify-content: center; font-size: 17px; padding: 0; border-radius: 10px; }
 .mjc-temp { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; min-width: 96px; text-align: center; }
 .mjc-temp small { font-size: 14px; font-weight: 400; color: var(--dsw-alias-label-secondary); }
-.mjc-busy { position: absolute; inset: 0; border-radius: 16px; background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 55%, transparent); display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--dsw-alias-label-secondary); z-index: 2; pointer-events: none; }
+
 .mjc-spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--dsw-alias-border-l2); border-top-color: var(--dsw-alias-brand-primary); animation: mjc-spin .8s linear infinite; margin-right: 8px; }
 @keyframes mjc-spin { to { transform: rotate(360deg); } }
 .mjc-ops { margin-top: 8px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 16px; padding: 6px 18px 10px; }
@@ -258,6 +283,10 @@ window.__ModuleLoader__.load({
 .mjc-pop label { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; cursor: pointer; line-height: 1.5; }
 .mjc-pop .mjc-note { margin-top: 8px; }
 .mjc-empty { padding: 18px 4px; font-size: 13px; color: var(--dsw-alias-label-secondary); }
+.mjc-busy { position: static; inset: auto; background: none; justify-content: flex-start; border-radius: 0; font-size: 12px; }
+.mjc-meta { display: flex; gap: 6px 12px; flex-wrap: wrap; font-size: 11px; color: var(--dsw-alias-label-secondary); line-height: 1.5; }
+.mjc-pending { font-size: 12px; color: var(--dsw-alias-label-secondary); line-height: 1.5; }
+@media (max-width: 520px) { .mjc-inner { padding: 18px 14px 28px; } .mjc-grid { grid-template-columns: minmax(0, 1fr); } .mjc-header-actions { flex-wrap: wrap; } .mjc-pop { width: min(290px, 80vw); } .mjc-statrow { flex-wrap: wrap; } .mjc-op { gap: 6px; } }
 @media (prefers-reduced-motion: reduce) { .mjc-switch, .mjc-knob, .mjc-btn { transition: none; } .mjc-spinner { animation-duration: 2s; } }
 `
 
@@ -274,23 +303,58 @@ window.__ModuleLoader__.load({
       return `${p(d.getHours())}:${p(d.getMinutes())}`
     }
     function num(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null }
-    function fmtKwh(v) { return v === null ? '--' : (Math.round(v * 100) / 100).toFixed(2) }
+    function fmtKwh(v) { return num(v) === null ? '--' : (Math.round(v * 100) / 100).toFixed(2) }
 
-    async function apiState() {
-      const res = await fetch(ROUTE_STATE, { cache: 'no-store' })
+    function friendlyError(error) {
+      const message = String(error?.message || error || '')
+      if (/HTTP 40[13]/i.test(message)) return t('host.auth')
+      if (/timeout|timed out|aborted/i.test(message)) return T('panel.title') === zh['panel.title'] ? '设备查询或指令响应超时，请刷新状态后再操作。' : 'Device request timed out. Refresh status before retrying a command.'
+      if (/登录|授权|认证|auth|token|凭据/i.test(message)) return t('auth.hint')
+      if (/fetch|network|HTTP 50[234]/i.test(message)) return T('panel.title') === zh['panel.title'] ? '暂时无法连接米家服务，请稍后重试。' : 'Cannot reach the Mijia service. Please try again later.'
+      return message
+    }
+
+    async function apiRead(path, signal) {
+      const res = await fetch(path, { cache: 'no-store', signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      if (!data || data.ok !== true) throw new Error((data && data.message) || 'bad response')
+      if (!data || data.ok !== true) throw new Error(data?.message || `HTTP ${res.status}`)
       return data
     }
+    const apiState = (signal) => apiRead(ROUTE_STATE, signal)
+    const apiDevice = (alias, section, force, signal) => apiRead(`${ROUTE_DEVICE}?alias=${encodeURIComponent(alias)}&section=${section}&force=${force ? '1' : '0'}`, signal)
     async function apiControl(payload) {
-      const res = await fetch(ROUTE_CONTROL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res.json()
+      let res
+      try {
+        res = await fetch(ROUTE_CONTROL, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(35_000),
+        })
+      } catch (error) {
+        throw Object.assign(new Error(String(error?.message || error)), { uncertain: true })
+      }
+      let data
+      try { data = await res.json() } catch {
+        throw Object.assign(new Error(`HTTP ${res.status || 502}`), { uncertain: true })
+      }
+      if (!res.ok) throw Object.assign(new Error(data?.message || `HTTP ${res.status}`), { uncertain: res.status >= 500 })
+      return data
+    }
+
+    /** Merge each device independently. A late refresh cannot replace a newer command/readback. */
+    function mergeSnapshot(previous, incoming, blocked = new Set()) {
+      if (!previous) return incoming
+      if (previous.epoch !== incoming.epoch) {
+        return Number(String(incoming.epoch).split('-')[0]) < Number(String(previous.epoch).split('-')[0]) ? previous : incoming
+      }
+      const devices = { ...previous.devices }
+      for (const [alias, device] of Object.entries(incoming.devices || {})) {
+        if (!blocked.has(alias) && (!devices[alias] || device.revision >= devices[alias].revision)) devices[alias] = device
+      }
+      return { ...previous, ...incoming, devices,
+        ops: incoming.opsVersion >= previous.opsVersion ? incoming.ops : previous.ops,
+        opsVersion: Math.max(previous.opsVersion || 0, incoming.opsVersion || 0),
+        updatedAt: Math.max(previous.updatedAt || 0, incoming.updatedAt || 0),
+      }
     }
 
     /* ---------- 基础控件 ---------- */
@@ -310,17 +374,23 @@ window.__ModuleLoader__.load({
     }
 
     function CardShell({ device, busy, error, onRetry, children }) {
-      const label = device ? device.label.zh : ''
-      return h('section', { className: 'mjc-card', 'aria-label': label },
-        busy ? h('div', { className: 'mjc-busy', 'aria-live': 'polite' }, h('span', { className: 'mjc-spinner' }), t('card.busy')) : null,
+      const pending = device.pending
+      return h('section', { className: 'mjc-card', 'aria-label': device.label.zh, 'aria-busy': busy },
+        children,
+        busy ? h('div', { className: 'mjc-busy', role: 'status' }, h('span', { className: 'mjc-spinner' }), t('card.busy')) : null,
+        !busy && pending ? h('div', { className: 'mjc-pending', role: 'status' }, pending.checking && !pending.uncertain ? t('card.checking') : t('card.unconfirmed')) : null,
+        !device.stateUpdatedAt && !error ? h('div', { className: 'mjc-note', role: 'status' }, t('card.loading')) : null,
+        h('div', { className: 'mjc-meta' },
+          device.stateUpdatedAt ? h('span', null, `${t('card.updated')} ${fmtTime(device.stateUpdatedAt)}${device.error ? ` · ${t('card.cached')}` : ''}`) : null,
+          device.statsUpdatedAt ? h('span', null, `${t('card.statsUpdated')} ${fmtTime(device.statsUpdatedAt)}${device.statsError ? ` · ${t('card.cached')}` : ''}`) : null),
         error ? h('div', { className: 'mjc-banner err', role: 'alert' },
-          h('span', null, error), ' ',
-          onRetry ? h('button', { type: 'button', className: 'mjc-detail-toggle', onClick: onRetry }, t('card.retry')) : null) : null,
-        children)
+          h('span', null, friendlyError(error)), ' ',
+          onRetry ? h('button', { type: 'button', className: 'mjc-detail-toggle', onClick: onRetry }, t('card.retry')) : null) : null)
     }
 
     function CardHead({ device, readFailed, onOffDisabled, onChangeOn }) {
-      const on = device && device.on === true
+      const shown = device.localOn ?? (device.pending?.prop === 'on' && device.pending.checking && !device.pending.uncertain ? device.pending.value : device.on)
+      const on = shown === true
       return h('div', { className: 'mjc-card-head' },
         h(DeviceImage, { icon: device.icon, alt: device.label.zh }),
         h('div', null,
@@ -328,7 +398,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'mjc-card-product' }, device.product.zh)),
         h('div', { className: 'mjc-spacer' }),
         h(Switch, {
-          checked: on, disabled: onOffDisabled || readFailed, label: device.label.zh,
+          checked: on, disabled: onOffDisabled || (readFailed && !device.stateUpdatedAt) || shown == null, label: device.label.zh,
           onChange: (next) => onChangeOn(next),
         }))
     }
@@ -336,7 +406,7 @@ window.__ModuleLoader__.load({
     function StatCell({ label, value, unit, approx }) {
       return h('div', { className: 'mjc-stat' },
         h('div', { className: 'k' }, label),
-        h('div', { className: 'v' }, value === null || value === undefined ? '--' : `${approx ? '≈' : ''}${value}`,
+        h('div', { className: 'v' }, value === null || value === undefined || value === '--' || !Number.isFinite(Number(value)) ? '--' : `${approx ? '≈' : ''}${value}`,
           unit ? h('small', null, unit) : null))
     }
 
@@ -361,7 +431,7 @@ window.__ModuleLoader__.load({
           onKeyUp: (e) => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) commit(Number(e.target.value)) },
           onBlur: (e) => { if (dragging.current) commit(Number(e.target.value)) },
         }),
-        h('span', { className: 'val' }, `${shown}${unit ? ` ${unit}` : ''}`))
+        h('span', { className: 'val' }, live === null && !dragging.current ? '--' : `${shown}${unit ? ` ${unit}` : ''}`))
     }
 
     function SelectRow({ label, value, options, disabled, onChange }) {
@@ -410,11 +480,11 @@ window.__ModuleLoader__.load({
           h('span', { className: 'mjc-pill' }, `${t('light.mode')}: ${modeLabel}`)),
         h(SliderRow, {
           label: t('light.brightness'), value: device.brightness, min: 1, max: 100, unit: '%',
-          disabled: busy || !on, onCommit: (v) => onControl('brightness', v),
+          disabled: busy || !on || !!device.error, onCommit: (v) => onControl('brightness', v),
         }),
         h(SliderRow, {
           label: t('light.ct'), value: device.colorTemperature, min: 2700, max: 6500, unit: t('unit.k'),
-          disabled: busy || !on, onCommit: (v) => onControl('colorTemperature', v),
+          disabled: busy || !on || !!device.error, onCommit: (v) => onControl('colorTemperature', v),
         }),
         !on ? h('div', { className: 'mjc-note' }, t('light.offHint')) : null)
     }
@@ -446,15 +516,15 @@ window.__ModuleLoader__.load({
         h('div', null,
           h('div', { className: 'mjc-state-line', style: { marginBottom: 6 } }, t('ac.target'), h('span', { className: 'mjc-note' }, t('ac.targetNote'))),
           h('div', { className: 'mjc-stepper' },
-            h('button', { type: 'button', className: 'mjc-btn', disabled: busy || temp === null || temp <= 16, 'aria-label': '-', onClick: () => onControl('targetTemperature', temp - 1) }, '−'),
+            h('button', { type: 'button', className: 'mjc-btn', disabled: busy || !!device.error || temp === null || temp <= 16, 'aria-label': '-', onClick: () => onControl('targetTemperature', temp - 1) }, '−'),
             h('div', { className: 'mjc-temp' }, temp === null ? '--' : String(temp), h('small', null, '℃')),
-            h('button', { type: 'button', className: 'mjc-btn', disabled: busy || temp === null || temp >= 30, 'aria-label': '+', onClick: () => onControl('targetTemperature', temp + 1) }, '+'))),
-        h(SelectRow, { label: t('ac.mode'), value: device.mode, options: modeOptions, disabled: busy, onChange: (v) => onControl('mode', v) }),
-        h(SelectRow, { label: t('ac.fan'), value: device.fanLevel, options: fanOptions, disabled: busy, onChange: (v) => onControl('fanLevel', v) }),
+            h('button', { type: 'button', className: 'mjc-btn', disabled: busy || !!device.error || temp === null || temp >= 30, 'aria-label': '+', onClick: () => onControl('targetTemperature', temp + 1) }, '+'))),
+        h(SelectRow, { label: t('ac.mode'), value: device.mode, options: modeOptions, disabled: busy || !!device.error || !device.stateUpdatedAt, onChange: (v) => onControl('mode', v) }),
+        h(SelectRow, { label: t('ac.fan'), value: device.fanLevel, options: fanOptions, disabled: busy || !!device.error || !device.stateUpdatedAt, onChange: (v) => onControl('fanLevel', v) }),
         h('div', { className: 'mjc-row' },
           h('span', { className: 'k' }, t('ac.swing')),
           h('span', { className: 'val' }, null),
-          h(Switch, { checked: device.verticalSwing === true, disabled: busy, label: t('ac.swing'), onChange: (next) => onControl('verticalSwing', next) })),
+          h(Switch, { checked: device.verticalSwing === true, disabled: busy || !!device.error || device.verticalSwing == null, label: t('ac.swing'), onChange: (next) => onControl('verticalSwing', next) })),
         h('div', { className: 'mjc-statrow' },
           h(StatCell, { label: t('ac.power'), value: num(device.powerW) === null ? null : String(Math.round(device.powerW)), unit: t('unit.w') }),
           h(StatCell, { label: t('ac.today'), value: device.todayKwh == null ? null : fmtKwh(device.todayKwh), unit: t('unit.kwh'), approx: true }),
@@ -480,50 +550,102 @@ window.__ModuleLoader__.load({
 
     /* ---------- 页面 ---------- */
     function ConsolePage() {
-      const [snap, setSnap] = useState(null)
-      const [loading, setLoading] = useState(true)
+      const [snap, setSnap] = useState(pageSnapshot)
+      const [loading, setLoading] = useState(!pageSnapshot)
       const [refreshError, setRefreshError] = useState('')
       const [busy, setBusy] = useState({})
+      const [targets, setTargets] = useState({})
       const [cardError, setCardError] = useState({})
+      const [queryError, setQueryError] = useState({})
       const [settingsOpen, setSettingsOpen] = useState(false)
       const [autoRefresh, setAutoRefresh] = useState(() => {
-        try { return localStorage.getItem('mjc.autoRefresh') === '1' } catch { return false }
+        try { return localStorage.getItem('mjc.autoRefresh') !== '0' } catch { return true }
       })
-      const seqRef = useRef({})
-      const mountedRef = useRef(true)
-      const snapRef = useRef(null)
-      useEffect(() => { snapRef.current = snap }, [snap])
+      const mountedRef = useRef(false)
+      const requestRef = useRef(new Map())
+      const controllersRef = useRef(new Set())
+      const writesRef = useRef(new Set())
 
-      const load = useCallback(async () => {
+      const applyData = useCallback((data) => {
+        if (!mountedRef.current) return
+        // Writes block stale snapshots only for their own device, not the rest of the page.
+        const blocked = new Set(writesRef.current)
+        setSnap((previous) => {
+          const merged = mergeSnapshot(previous, data, blocked)
+          pageSnapshot = merged
+          return merged
+        })
+      }, [])
+
+      const read = useCallback((key, fetcher) => {
+        if (requestRef.current.has(key)) return requestRef.current.get(key)
+        const controller = new AbortController()
+        controllersRef.current.add(controller)
+        const promise = fetcher(controller.signal).then((data) => {
+          if (!controller.signal.aborted) applyData(data)
+          return data
+        }).finally(() => {
+          controllersRef.current.delete(controller)
+          if (requestRef.current.get(key) === promise) requestRef.current.delete(key)
+        })
+        requestRef.current.set(key, promise)
+        return promise
+      }, [applyData])
+
+      const load = useCallback(async (force = false, aliasOnly = null) => {
+        if (!mountedRef.current || document.visibilityState !== 'visible') return
+        setLoading(true)
         try {
-          const data = await apiState()
-          if (!mountedRef.current) return
-          setSnap(data)
+          const data = await read('snapshot', apiState)
+          if (!mountedRef.current || document.visibilityState !== 'visible') return
           setRefreshError('')
-          setCardError({})
+          const aliases = aliasOnly ? [aliasOnly] : Object.keys(data.devices)
+          await Promise.allSettled(aliases.flatMap((alias) => {
+            if (writesRef.current.has(alias)) return []
+            const sections = data.devices[alias].kind === 'light' ? ['state'] : ['state', 'stats']
+            return sections.map((section) => read(`${alias}:${section}`, (signal) => apiDevice(alias, section, force, signal))
+              .then(() => { if (mountedRef.current) setQueryError((prev) => ({ ...prev, [`${alias}:${section}`]: '' })) })
+              .catch((error) => {
+                if (error.name !== 'AbortError' && mountedRef.current) setQueryError((prev) => ({ ...prev, [`${alias}:${section}`]: friendlyError(error) }))
+              }))
+          }))
         } catch (error) {
-          if (!mountedRef.current) return
-          setRefreshError(String((error && error.message) || error))
+          if (error.name !== 'AbortError' && mountedRef.current) setRefreshError(friendlyError(error))
         } finally {
           if (mountedRef.current) setLoading(false)
         }
-      }, [])
+      }, [read])
 
       useEffect(() => {
         mountedRef.current = true
+        const stopReads = () => {
+          for (const controller of controllersRef.current) controller.abort()
+          requestRef.current.clear()
+        }
         load()
-        const onVis = () => { if (document.visibilityState === 'visible') load() }
+        const onVis = () => {
+          if (document.visibilityState === 'visible') load()
+          else stopReads()
+        }
         document.addEventListener('visibilitychange', onVis)
         return () => {
           mountedRef.current = false
+          stopReads()
           document.removeEventListener('visibilitychange', onVis)
         }
       }, [load])
 
       useEffect(() => {
         if (!autoRefresh) return undefined
-        const timer = setInterval(() => { if (document.visibilityState === 'visible') load() }, AUTO_REFRESH_MS)
-        return () => clearInterval(timer)
+        // No overlapping refresh loop. Read deduplication also covers manual refreshes.
+        let stopped = false
+        let timer
+        const tick = async () => {
+          if (document.visibilityState === 'visible') await load()
+          if (!stopped) timer = setTimeout(tick, AUTO_REFRESH_MS)
+        }
+        timer = setTimeout(tick, AUTO_REFRESH_MS)
+        return () => { stopped = true; clearTimeout(timer) }
       }, [autoRefresh, load])
 
       const toggleAutoRefresh = (next) => {
@@ -532,57 +654,50 @@ window.__ModuleLoader__.load({
       }
 
       const doControl = useCallback(async (alias, prop, value) => {
-        const seq = (seqRef.current[alias] || 0) + 1
-        seqRef.current[alias] = seq
-        setBusy((b) => ({ ...b, [alias]: true }))
-        setCardError((e) => ({ ...e, [alias]: '' }))
-        // 开关 optimistic：立即反映目标位置；失败回滚。空调伴侣类由状态角标继续标注"待确认"，不伪装已执行。
-        const prevDevice = prop === 'on' && snapRef.current ? snapRef.current.devices[alias] : null
-        if (prevDevice) {
-          setSnap((s) => (s ? { ...s, devices: { ...s.devices, [alias]: { ...prevDevice, on: value === true } } } : s))
-        }
-        const revert = (ops) => {
-          if (prevDevice) setSnap((s) => (s ? { ...s, devices: { ...s.devices, [alias]: prevDevice }, ops: ops || s.ops } : s))
-          else if (ops) setSnap((s) => (s ? { ...s, ops } : s))
-        }
+        if (writesRef.current.has(alias)) return
+        writesRef.current.add(alias) // synchronous protection against double clicks
+        setBusy((previous) => ({ ...previous, [alias]: true }))
+        if (prop === 'on') setTargets((previous) => ({ ...previous, [alias]: value }))
+        setCardError((previous) => ({ ...previous, [alias]: '' }))
         try {
-          const res = await apiControl({ alias, prop, value })
-          if (seqRef.current[alias] !== seq || !mountedRef.current) return // 迟到响应丢弃
-          if (!res || res.ok !== true) {
-            setCardError((e) => ({ ...e, [alias]: String((res && res.message) || 'unknown error') }))
-            revert(res && res.ops)
-            return
+          const result = await apiControl({ alias, prop, value })
+          writesRef.current.delete(alias)
+          if (!mountedRef.current) return
+          applyData(result)
+          if (!result.ok) setCardError((previous) => ({ ...previous, [alias]: result.uncertain
+            ? (T('panel.title') === zh['panel.title'] ? '发送超时，设备可能已执行；请刷新状态，勿重复发送。' : 'Command timed out and may have executed. Refresh status; do not resend.')
+            : friendlyError(result.message) }))
+          // Only reads are repeated. This joins Host reconciliation, never resends the command.
+          if (result.ok || result.uncertain) {
+            void read(`${alias}:verify`, (signal) => apiDevice(alias, 'state', true, signal)).catch(() => {})
           }
-          setSnap((s) => {
-            if (!s) return s
-            // 浅合并：快速回读省略统计键，保留旧统计值；回读失败（device.error）保留当前显示，等待手动刷新
-            const merged = res.device && !res.device.error
-              ? { ...(s.devices[alias] || {}), ...res.device }
-              : s.devices[alias]
-            return { ...s, devices: { ...s.devices, [alias]: merged }, ops: res.ops || s.ops, updatedAt: res.updatedAt || s.updatedAt }
-          })
         } catch (error) {
-          if (seqRef.current[alias] !== seq || !mountedRef.current) return
-          revert()
-          setCardError((e) => ({ ...e, [alias]: String((error && error.message) || error) }))
+          if (mountedRef.current) setCardError((previous) => ({ ...previous, [alias]: error.uncertain ? t('card.deliveryUnknown') : friendlyError(error) }))
         } finally {
-          if (seqRef.current[alias] === seq && mountedRef.current) setBusy((b) => ({ ...b, [alias]: false }))
+          writesRef.current.delete(alias)
+          if (mountedRef.current) {
+            setBusy((previous) => ({ ...previous, [alias]: false }))
+            setTargets((previous) => { const next = { ...previous }; delete next[alias]; return next })
+          }
         }
-      }, [])
+      }, [applyData, read])
 
-      const devices = snap ? snap.devices : null
-      const conn = loading && !snap ? 'loading' : !snap ? 'err' : snap.authExpired ? 'auth' : snap.connected ? 'ok' : 'err'
-      const connText = { loading: t('conn.loading'), ok: t('conn.ok'), err: t('conn.err'), auth: t('conn.auth') }[conn]
-      const connTone = { loading: 'idle', ok: 'ok', err: 'err', auth: 'warn' }[conn]
-
+      const devices = snap?.devices
+      const states = Object.values(devices || {})
+      const hasErrors = states.some((device) => device.error || device.statsError)
+      const hasSuccess = states.some((device) => device.stateUpdatedAt && !device.error)
+      const authExpired = states.some((device) => /登录|授权|认证|auth|token|凭据/i.test(device.error || device.statsError || ''))
+      const conn = authExpired ? 'auth' : hasErrors ? (hasSuccess ? 'partial' : 'err') : hasSuccess ? 'ok' : loading ? 'loading' : 'err'
+      const connText = t(`conn.${conn}`)
+      const connTone = { loading: 'idle', ok: 'ok', partial: 'warn', err: 'err', auth: 'warn' }[conn]
       const cardProps = (alias) => ({
-        device: devices[alias],
-        busy: !!busy[alias],
-        error: cardError[alias] || (devices[alias] && devices[alias].error) || '',
+        device: { ...devices[alias], ...(Object.hasOwn(targets, alias) ? { localOn: targets[alias] } : {}) },
+        busy: !!busy[alias] || !!devices[alias].sending,
+        error: cardError[alias] || queryError[`${alias}:state`] || devices[alias].error || queryError[`${alias}:stats`] || devices[alias].statsError || '',
         onControl: (prop, value) => doControl(alias, prop, value),
-        onRetry: load,
+        onRetry: () => { setCardError((previous) => ({ ...previous, [alias]: '' })); load(true, alias) },
       })
-
+      const Card = { plug: PlugCard, light: LightCard, acpartner: AcCard }
       return h('div', { className: 'mjc-page' },
         h('style', null, CSS),
         h('div', { className: 'mjc-inner' },
@@ -592,7 +707,7 @@ window.__ModuleLoader__.load({
               h('div', { className: 'mjc-subtitle' }, t('panel.subtitle'))),
             h('div', { className: 'mjc-header-actions' },
               h('span', { className: 'mjc-conn', role: 'status' }, h('span', { className: `mjc-dot ${connTone}`, 'aria-hidden': true }), connText),
-              h('button', { type: 'button', className: 'mjc-btn', onClick: load, disabled: loading && !snap }, loading && !snap ? t('refreshing') : t('refresh')),
+              h('button', { type: 'button', className: 'mjc-btn', onClick: () => load(true), disabled: loading }, loading ? t('refreshing') : t('refresh')),
               h('div', { className: 'mjc-settings' },
                 h('button', { type: 'button', className: 'mjc-btn icon', 'aria-label': t('settings'), 'aria-expanded': settingsOpen, onClick: () => setSettingsOpen(!settingsOpen) }, '⚙'),
                 settingsOpen ? h('div', { className: 'mjc-pop', role: 'dialog', 'aria-label': t('settings') },
@@ -600,19 +715,13 @@ window.__ModuleLoader__.load({
                     h('input', { type: 'checkbox', checked: autoRefresh, onChange: (e) => toggleAutoRefresh(e.target.checked) }),
                     h('span', null, t('settings.autoRefresh'))),
                   h('div', { className: 'mjc-note' }, t('settings.note'))) : null))),
-          snap && snap.authExpired ? h('div', { className: 'mjc-banner warn', role: 'alert' }, t('auth.hint')) : null,
+          authExpired ? h('div', { className: 'mjc-banner warn', role: 'alert' }, t('auth.hint')) : null,
           refreshError ? h('div', { className: 'mjc-banner err', role: 'alert' }, `${t('error.title')}: ${refreshError}`) : null,
           h('div', { className: 'mjc-section-head' },
-            h('div', { className: 'mjc-section-title' }, t('devices.title'), devices ? h('small', null, `3 ${t('devices.count')}`) : null),
-            snap ? h('div', { className: 'mjc-updated' },
-              `${t('devices.updated')} ${fmtClock(snap.updatedAt)}`,
-              refreshError ? ` · ${t('devices.stale')}` : '') : null),
-          !snap && loading ? h('div', { className: 'mjc-empty' }, t('conn.loading')) : null,
-          !snap && !loading ? h('div', { className: 'mjc-empty' }, t('error.body')) : null,
-          devices ? h('div', { className: 'mjc-grid' },
-            h(PlugCard, cardProps('plug4')),
-            h(LightCard, cardProps('lightbar2')),
-            h(AcCard, cardProps('acpartner2'))) : null,
+            h('div', { className: 'mjc-section-title' }, t('devices.title'), devices ? h('small', null, `${states.length} ${t('devices.count')}`) : null),
+            snap?.updatedAt ? h('div', { className: 'mjc-updated' }, `${t('devices.updated')} ${fmtClock(snap.updatedAt)}`) : null),
+          !snap ? h('div', { className: 'mjc-empty' }, loading ? t('conn.loading') : t('error.body')) : null,
+          devices ? h('div', { className: 'mjc-grid' }, Object.keys(devices).map((alias) => h(Card[devices[alias].kind], { key: alias, ...cardProps(alias) }))) : null,
           snap ? h(OpsList, { ops: snap.ops, devices }) : null))
     }
 
