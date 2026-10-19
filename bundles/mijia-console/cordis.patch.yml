@@ -1,0 +1,43 @@
+# 米家控制台页面：Host 端（状态聚合 + 受控控制 + 操作日志），Client 端为主面板页面
+# 注意：YAML 1.1 中 on/off 会被解析为布尔值，属性键 "on" 必须加引号。
+- insert:
+    - id: mijia-console
+      name: '@local/mijia-console'
+      config:
+        serverName: mijia
+        devices:
+          - alias: plug4
+            did: "2246644058"
+            kind: plug
+            icon: plug.png
+            label: { zh: 灯带, en: Light Strip }
+            product: { zh: 小米智能插座 4, en: Xiaomi Smart Plug 4 }
+            props: { "on": on-2, power: electric-power, consumption: power-consumption, fault: fault }
+            stats: { key: "11.1", dayType: stat_day_v3, monthType: stat_month_v3, unit: kwh }
+            writable:
+              "on": { prop: on-2, type: bool }
+          - alias: lightbar2
+            did: "2110659496"
+            kind: light
+            icon: lightbar.png
+            label: { zh: 显示器挂灯, en: Monitor Light Bar }
+            product: { zh: 米家显示器挂灯 2, en: Mijia Monitor Light Bar 2 }
+            props: { "on": on-2, brightness: brightness, colorTemperature: color-temperature, mode: mode }
+            writable:
+              "on": { prop: on-2, type: bool }
+              brightness: { prop: brightness, type: int, min: 1, max: 100 }
+              colorTemperature: { prop: color-temperature, type: int, min: 2700, max: 6500 }
+          - alias: acpartner2
+            did: "2059271104"
+            kind: acpartner
+            icon: acpartner.png
+            label: { zh: 空调伴侣, en: AC Companion }
+            product: { zh: 米家空调伴侣 2, en: Mijia AC Companion 2 }
+            props: { "on": "on", mode: mode, targetTemperature: target-temperature, fanLevel: fan-level, verticalSwing: vertical-swing, power: electric-power, acState: ac-state }
+            stats: { key: powerCost, dayType: stat_day, monthType: stat_month, unit: wh }
+            writable:
+              "on": { prop: "on", type: bool }
+              mode: { prop: mode, type: enum, values: [0, 1, 2, 3, 4] }
+              targetTemperature: { prop: target-temperature, type: int, min: 16, max: 30 }
+              fanLevel: { prop: fan-level, type: enum, values: [0, 1, 2, 3] }
+              verticalSwing: { prop: vertical-swing, type: bool }

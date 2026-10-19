@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Mi Home MCP (3-device whitelist)",
+    "description": "Connects the mijia-api MCP server over stdio and restricts device control to three whitelisted devices: Xiaomi Smart Plug 4, Mijia Monitor Light Bar 2, Mijia AC Companion 2."
+  }
+}

@@ -1,0 +1,6 @@
+# 凭据与本地产物
+auth.json
+*.log
+.DS_Store
+node_modules/
+__pycache__/

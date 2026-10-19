@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Mi Home Console",
+    "description": "Visual console page for the three whitelisted devices (light strip plug / monitor light bar / AC companion), reusing the existing mijia MCP connection and credentials."
+  }
+}
