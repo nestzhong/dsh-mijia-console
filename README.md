@@ -2,7 +2,11 @@
 
 在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 中直接控制米家设备：MCP 接入 + 执行层设备白名单守卫 + 可视化控制台页面。**无需 Home Assistant / Docker / 虚拟机**——经 [Do1e/mijia-api](https://github.com/Do1e/mijia-api) 直连米家云端。
 
-![米家控制台运行截图](docs/images/console.webp)
+![控制台总览：三张设备卡片、真实状态与最近操作](docs/images/console-overview.webp)
+
+![灯带：开关 + 实时功率 26W + 最近 7 天用电明细](docs/images/console-plug-detail.webp)
+
+![显示器挂灯：开灯后亮度/色温滑块可调，拖动预览松手提交](docs/images/console-lightbar-on.webp)
 
 ## 功能
 
@@ -24,7 +28,9 @@ bundles/
   mijia-console/   # 可视化控制台页面（Host 路由 + Client 面板）
 docs/
   HANDOVER.md      # 验收交接文档：安装/启停/能力矩阵/实测记录/未验证项
-  images/          # 运行截图
+  CONSOLE-1.1.0.md # 控制台 v1.1.0 更新说明与验收清单
+  images/          # 运行截图（v1.1.0 实拍）
+tests/             # node --test 单元与 React 渲染测试（26 项）
 ```
 
 ## 安装
@@ -69,4 +75,4 @@ npm test
 
 ## 实测状态
 
-灯带与空调伴侣的**开/关闭环**均经真实设备验证（功率实证）；挂灯开/关经接口确认；其余细节与未验证项见 [docs/HANDOVER.md](docs/HANDOVER.md)。用电统计口径：插座为 kWh（日/月交叉验证一致）；空调伴侣原始值按 Wh 解读（官方未确认）。
+灯带与空调伴侣的**开/关闭环**均经真实设备验证（功率实证）。控制台 v1.1.0 已经真实环境验收（见上方实拍截图）：三张卡片渲染真实数据、页面开关灯带（回读一致，点亮功率 26W）、挂灯开/关（回读一致）、最近 7 天用电明细、操作日志的来源与状态标注（发送中/已发送/回读一致）。其余细节与未验证项（挂灯亮度/色温写、空调模式/温度/风速写、深浅色与窄窗口目检）见 [docs/HANDOVER.md](docs/HANDOVER.md)。用电统计口径：插座为 kWh（日/月交叉验证一致）；空调伴侣原始值按 Wh 解读（官方未确认）。
