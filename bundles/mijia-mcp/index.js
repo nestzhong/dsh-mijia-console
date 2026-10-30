@@ -69,15 +69,15 @@ function buildRules(serverName, devices) {
 	});
 	return `## 米家设备控制规则（MCP server: ${serverName}）
 
-只允许操作以下三台设备（按别名/did 精确匹配，执行层已拒绝其他设备）：
+只允许操作以下 ${devices.length} 台白名单设备（按别名/did 精确匹配，执行层已拒绝其他设备）：
 ${lines.join("\n")}
 
 执行规则：
-- 优先用 did 指定设备；小米智能插座 4 与米家空调伴侣 2 的米家名称可能相似，严禁凭名称猜测目标。
+- 优先用 did 指定设备；米家名称与别名可能不同或被用户改过，严禁凭名称猜测目标。
 - 开/关使用 set_device_property(prop_name="on", value="true"/"false")；禁止使用 toggle 类动作。
 - 控制调用超时或结果不明时，先 get_device_properties 查询当前状态再决定是否重试，不要盲目重复执行。
 - 查询结果必须标注单位、统计时间范围与数据新鲜度；取不到数据时如实说明，不要编造。
-- 米家空调伴侣 2 经云端/网关下发红外指令：set/run 返回成功仅表示指令已发送，不等于空调本体已执行；需要确认时用 get_device_properties 回读并如实说明。
+- 经云端/网关转发的设备（如空调伴侣类红外设备）：set/run 返回成功仅表示指令已发送，不等于本体已执行；需要确认时用 get_device_properties 回读并如实说明。
 - 场景（run_scene）与小爱音箱（run_speaker_command / speaker_play）能力已被禁用。
 - 以上设备之外的其他米家设备不在本批开放范围，发现用户要求操作时应明确拒绝并说明。`;
 }
