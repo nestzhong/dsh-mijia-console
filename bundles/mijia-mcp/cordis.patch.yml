@@ -1,15 +1,15 @@
-# 米家 MCP 接入：mijia-api stdio 服务器 + 三台设备白名单执行层守卫
+# 米家 MCP 接入：mijia-api stdio 服务器 + 设备白名单执行层守卫
 - insert:
     - id: mijia-api
       name: '@deepseek-ai/dsh-mcp-client'
       config:
         serverName: mijia
         transport: stdio
-        command: /Users/xuanyumacbook/.local/share/mijia-api/venv/bin/mijiaAPI
+        command: /Users/zhonglifeng/miniconda3/bin/mijiaAPI
         args:
           - mcp
           - -p
-          - /Users/xuanyumacbook/.config/mijia-api/auth.json
+          - /Users/zhonglifeng/.config/mijia-api/auth.json
         toolCallTimeoutMs: 90000
         failOnStartupError: true
     - id: mijia-device-guard
@@ -17,18 +17,23 @@
       config:
         serverName: mijia
         devices:
-          - alias: plug4
-            label: 灯带（小米智能插座 4）
-            did: "2246644058"
+          - alias: ceilingLight
+            label: 吸顶灯（Yeelight 纤玉 C2001）
+            did: "360350916"
             names:
-              - 灯带
-          - alias: lightbar2
-            label: 米家显示器挂灯 2
-            did: "2110659496"
+              - 吸顶灯
+          - alias: airPurifier
+            label: 米家空气净化器 5S
+            did: "832685933"
             names:
-              - 米家显示器挂灯2
-          - alias: acpartner2
-            label: 米家空调伴侣 2
-            did: "2059271104"
+              - Mijia Smart Air Purifier 5S
+          - alias: fan1x
+            label: 米家直流变频落地扇 1X
+            did: "742929654"
             names:
-              - 空调插座
+              - Mijia Smart DC Standing Fan 1X
+          - alias: airer
+            label: MrBond 智能晾衣架
+            did: "648002374"
+            names:
+              - MrBond smart clothes dryer-Simple3
